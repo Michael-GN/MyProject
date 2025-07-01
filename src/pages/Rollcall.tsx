@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, CheckCircle, Clock, Users, MapPin, Phone, MessageCircle, Filter, Eye, Calendar, BookOpen, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Users, MapPin, Phone, MessageCircle, Filter, Eye, Calendar, BookOpen, X, Ban } from 'lucide-react';
 import { APIService } from '../utils/api';
 import { LocalDBService } from '../utils/localdb';
 import { SyncService } from '../utils/sync';
@@ -7,6 +7,7 @@ import type { Session, Student, AttendanceRecord, AbsenteeRecord } from '../type
 
 export default function Rollcall() {
   const [availableSessions, setAvailableSessions] = useState<Session[]>([]);
+  const [completedSessions, setCompletedSessions] = useState<string[]>([]);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [absentees, setAbsentees] = useState<AbsenteeRecord[]>([]);
@@ -21,6 +22,7 @@ export default function Rollcall() {
 
   useEffect(() => {
     loadAvailableSessions();
+    loadCompletedSessions();
   }, []);
 
   const loadAvailableSessions = async () => {
@@ -39,11 +41,32 @@ export default function Rollcall() {
     }
   };
 
+  const loadCompletedSessions = () => {
+    const completed = LocalDBService.getCachedData('rollcall_completed_sessions') || [];
+    setCompletedSessions(completed);
+  };
+
+  const markSessionAsCompleted = (sessionId: string) => {
+    const completed = [...completedSessions, sessionId];
+    setCompletedSessions(completed);
+    LocalDBService.cacheData('rollcall_completed_sessions', completed);
+  };
+
+  const isSessionCompleted = (sessionId: string) => {
+    return completedSessions.includes(sessionId);
+  };
+
   const handleSessionSelect = (session: Session) => {
+    if (isSessionCompleted(session.id)) {
+      setError('This session has already been completed for this field.');
+      return;
+    }
+
     setSelectedSession(session);
     setStudents(session.students.map(student => ({ ...student, isPresent: undefined })));
     setShowAbsentees(false);
     setAbsentees([]);
+    setError(null);
   };
 
   const handleToggleStudentPresence = (studentId: string, isPresent: boolean) => {
@@ -131,9 +154,19 @@ IME Discipline Master`;
         sessionId: selectedSession.id,
       }));
 
+      // Save absentees to reports
+      if (absenteeRecords.length > 0) {
+        const existingAbsentees = LocalDBService.getCachedData('rollcall_absentee_records') || [];
+        const updatedAbsentees = [...existingAbsentees, ...absenteeRecords];
+        LocalDBService.cacheData('rollcall_absentee_records', updatedAbsentees);
+      }
+
       setAbsentees(absenteeRecords);
 
-      // Remove the session from available sessions after successful submission
+      // Mark session as completed
+      markSessionAsCompleted(selectedSession.id);
+
+      // Remove the session from available sessions
       setAvailableSessions(prev => prev.filter(session => session.id !== selectedSession.id));
       
       // Show absentee summary
@@ -184,12 +217,20 @@ IME Discipline Master`;
     return fields;
   };
 
-  // Filter sessions by selected field
+  // Filter sessions by selected field and exclude completed ones
   const getFilteredSessions = () => {
-    if (!selectedField) return availableSessions;
-    return availableSessions.filter(session => 
-      session.fieldName.includes(selectedField)
-    );
+    let filtered = availableSessions;
+    
+    if (selectedField) {
+      filtered = filtered.filter(session => 
+        session.fieldName.includes(selectedField)
+      );
+    }
+    
+    // Exclude completed sessions
+    filtered = filtered.filter(session => !isSessionCompleted(session.id));
+    
+    return filtered;
   };
 
   // Group absentees by field and course
@@ -417,7 +458,7 @@ IME Discipline Master`;
           Rollcall Management
         </h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
-          Select a session to take attendance
+          Select a session to take attendance (one-time per field per session)
         </p>
       </div>
 
@@ -546,53 +587,71 @@ IME Discipline Master`;
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredSessions.map((session) => (
-                <div
-                  key={session.id}
-                  onClick={() => handleSessionSelect(session)}
-                  className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-blue-500 hover:shadow-md transition-all cursor-pointer"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {session.courseTitle}
-                      </h4>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {session.courseCode}
-                      </p>
-                    </div>
-                    <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full dark:bg-blue-900 dark:text-blue-200">
-                      Active
-                    </span>
-                  </div>
-                  
-                  <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                    <div className="flex items-center space-x-2">
-                      <Users className="w-4 h-4" />
-                      <span>{session.fieldName} - {session.level}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Clock className="w-4 h-4" />
-                      <span>{session.startTime} - {session.endTime}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <MapPin className="w-4 h-4" />
-                      <span>{session.room}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        {session.students.length} students
-                      </span>
-                      <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                        Take Attendance →
+              {filteredSessions.map((session) => {
+                const isCompleted = isSessionCompleted(session.id);
+                return (
+                  <div
+                    key={session.id}
+                    className={`bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700 transition-all ${
+                      isCompleted 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : 'hover:border-blue-500 hover:shadow-md cursor-pointer'
+                    }`}
+                    onClick={() => !isCompleted && handleSessionSelect(session)}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          {session.courseTitle}
+                        </h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {session.courseCode}
+                        </p>
+                      </div>
+                      <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
+                        isCompleted
+                          ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                      }`}>
+                        {isCompleted ? 'Completed' : 'Active'}
                       </span>
                     </div>
+                    
+                    <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center space-x-2">
+                        <Users className="w-4 h-4" />
+                        <span>{session.fieldName} - {session.level}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Clock className="w-4 h-4" />
+                        <span>{session.startTime} - {session.endTime}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="w-4 h-4" />
+                        <span>{session.room}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                          {session.students.length} students
+                        </span>
+                        {isCompleted ? (
+                          <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+                            <Ban className="w-4 h-4" />
+                            <span>Already Completed</span>
+                          </div>
+                        ) : (
+                          <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                            Take Attendance →
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

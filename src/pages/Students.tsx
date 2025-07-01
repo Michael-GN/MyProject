@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Phone, Mail, User, BookOpen, Users, Edit, Plus, X, Save, Upload } from 'lucide-react';
+import { Search, Filter, Phone, Mail, User, BookOpen, Users, Edit, Plus, X, Save, Upload, Eye, ArrowLeft } from 'lucide-react';
 import ImportStudentsModal from '../components/ImportStudentsModal';
 import StudentAbsenteeHours from '../components/StudentAbsenteeHours';
 import { APIService } from '../utils/api';
@@ -28,6 +28,7 @@ export default function Students() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAbsenteeHours, setShowAbsenteeHours] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [viewingFieldStudents, setViewingFieldStudents] = useState<{field: string, level?: string} | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -47,7 +48,7 @@ export default function Students() {
 
   useEffect(() => {
     filterStudents();
-  }, [students, filters]);
+  }, [students, filters, viewingFieldStudents]);
 
   const loadStudentsData = async () => {
     try {
@@ -80,12 +81,22 @@ export default function Students() {
   const filterStudents = () => {
     let filtered = [...students];
 
-    if (filters.field) {
-      filtered = filtered.filter(student => student.field === filters.field);
-    }
+    // If viewing specific field students, filter by that field first
+    if (viewingFieldStudents) {
+      filtered = filtered.filter(student => {
+        const matchesField = student.field === viewingFieldStudents.field;
+        const matchesLevel = !viewingFieldStudents.level || student.level === viewingFieldStudents.level;
+        return matchesField && matchesLevel;
+      });
+    } else {
+      // Apply regular filters
+      if (filters.field) {
+        filtered = filtered.filter(student => student.field === filters.field);
+      }
 
-    if (filters.level) {
-      filtered = filtered.filter(student => student.level === filters.level);
+      if (filters.level) {
+        filtered = filtered.filter(student => student.level === filters.level);
+      }
     }
 
     if (filters.search) {
@@ -110,6 +121,12 @@ export default function Students() {
       level: '',
       search: '',
     });
+    setViewingFieldStudents(null);
+  };
+
+  const handleViewFieldStudents = (fieldName: string, level?: string) => {
+    setViewingFieldStudents({ field: fieldName, level });
+    setFilters({ field: '', level: '', search: '' }); // Clear other filters
   };
 
   const handleCallParent = (phoneNumber: string) => {
@@ -127,8 +144,8 @@ export default function Students() {
     setFormData({
       name: '',
       matricule: '',
-      field: '',
-      level: '',
+      field: viewingFieldStudents?.field || '',
+      level: viewingFieldStudents?.level || '',
       parentName: '',
       parentPhone: '',
       parentEmail: '',
@@ -272,22 +289,42 @@ export default function Students() {
       <div className="bg-blue-600 rounded-xl p-6 text-white">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">
-              Student Management
-            </h1>
-            <p className="text-blue-100 mt-1">
-              Manage student information and parent contacts
-            </p>
+            <div className="flex items-center space-x-4">
+              {viewingFieldStudents && (
+                <button
+                  onClick={() => setViewingFieldStudents(null)}
+                  className="p-2 hover:bg-blue-700 rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+              )}
+              <div>
+                <h1 className="text-2xl font-bold">
+                  {viewingFieldStudents 
+                    ? `${viewingFieldStudents.field} Students${viewingFieldStudents.level ? ` - ${viewingFieldStudents.level}` : ''}`
+                    : 'Student Management'
+                  }
+                </h1>
+                <p className="text-blue-100 mt-1">
+                  {viewingFieldStudents 
+                    ? `Viewing students in ${viewingFieldStudents.field}${viewingFieldStudents.level ? ` (${viewingFieldStudents.level})` : ''}`
+                    : 'Manage student information and parent contacts'
+                  }
+                </p>
+              </div>
+            </div>
           </div>
           
           <div className="flex items-center space-x-3 mt-4 sm:mt-0">
-            <button
-              onClick={() => setShowAbsenteeHours(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-            >
-              <Users className="w-4 h-4" />
-              <span>Absentee Hours</span>
-            </button>
+            {!viewingFieldStudents && (
+              <button
+                onClick={() => setShowAbsenteeHours(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                <Users className="w-4 h-4" />
+                <span>Absentee Hours</span>
+              </button>
+            )}
             
             <button 
               onClick={() => setShowImportModal(true)}
@@ -308,40 +345,61 @@ export default function Students() {
         </div>
       </div>
 
-      {/* Field Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {getFieldStats().map((field) => (
-          <div key={field.id} className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-700 hover:shadow-xl transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                  {field.name}
-                </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {field.code}
-                </p>
+      {/* Field Statistics - Only show when not viewing specific field students */}
+      {!viewingFieldStudents && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {getFieldStats().map((field) => (
+            <div key={field.id} className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-700 hover:shadow-xl transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                    {field.name}
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {field.code}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-blue-600">
+                    {field.actualStudents}
+                  </div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    students
+                  </div>
+                </div>
               </div>
-              <div className="text-right">
-                <div className="text-3xl font-bold text-blue-600">
-                  {field.actualStudents}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  students
-                </div>
+              
+              <div className="space-y-2 mb-4">
+                {field.levels.map((level) => (
+                  <div key={level.name} className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">{level.name}</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-semibold text-gray-900 dark:text-white">{level.count}</span>
+                      {level.count > 0 && (
+                        <button
+                          onClick={() => handleViewFieldStudents(field.name, level.name)}
+                          className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900 rounded transition-colors"
+                          title={`View ${level.name} students`}
+                        >
+                          <Eye className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
+
+              <button
+                onClick={() => handleViewFieldStudents(field.name)}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Eye className="w-4 h-4" />
+                <span>View All Students</span>
+              </button>
             </div>
-            
-            <div className="space-y-2">
-              {field.levels.map((level) => (
-                <div key={level.name} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 dark:text-gray-400">{level.name}</span>
-                  <span className="font-semibold text-gray-900 dark:text-white">{level.count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Error Message */}
       {error && (
@@ -392,6 +450,7 @@ export default function Students() {
                 value={formData.field}
                 onChange={(e) => setFormData(prev => ({ ...prev, field: e.target.value, level: '' }))}
                 className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                disabled={!!viewingFieldStudents?.field}
               >
                 <option value="">Select Field</option>
                 {fields.map(field => (
@@ -408,7 +467,7 @@ export default function Students() {
                 value={formData.level}
                 onChange={(e) => setFormData(prev => ({ ...prev, level: e.target.value }))}
                 className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                disabled={!formData.field}
+                disabled={!formData.field || !!viewingFieldStudents?.level}
               >
                 <option value="">Select Level</option>
                 <option value="Level 100">Level 100</option>
@@ -505,19 +564,26 @@ export default function Students() {
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-500 dark:text-gray-400">
             Showing {filteredStudents.length} of {students.length} students
+            {viewingFieldStudents && (
+              <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full dark:bg-blue-900 dark:text-blue-200">
+                {viewingFieldStudents.field}{viewingFieldStudents.level && ` - ${viewingFieldStudents.level}`}
+              </span>
+            )}
           </span>
           
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Filter className="w-4 h-4" />
-            <span>Filters</span>
-          </button>
+          {!viewingFieldStudents && (
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Filter className="w-4 h-4" />
+              <span>Filters</span>
+            </button>
+          )}
         </div>
 
-        {/* Filters */}
-        {showFilters && (
+        {/* Filters - Only show when not viewing specific field students */}
+        {showFilters && !viewingFieldStudents && (
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white">Filter Students</h3>
@@ -673,7 +739,9 @@ export default function Students() {
             No students found
           </h3>
           <p className="text-gray-500 dark:text-gray-400">
-            {filters.search || filters.field || filters.level
+            {viewingFieldStudents
+              ? `No students found in ${viewingFieldStudents.field}${viewingFieldStudents.level ? ` - ${viewingFieldStudents.level}` : ''}.`
+              : filters.search || filters.field || filters.level
               ? 'Try adjusting your search criteria or filters.'
               : 'No students have been added yet.'}
           </p>
