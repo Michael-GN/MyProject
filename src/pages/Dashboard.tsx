@@ -236,7 +236,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="bg-gradient-to-r from-red-500 to-red-800 rounded-2xl p-8 text-white">
         <h1 className="text-3xl font-bold mb-2">
-          Welcome to Rollcall Manager
+          Welcome to IME Rollcall Manager
         </h1>
         <p className="text-blue-100 text-lg">
           Monitor attendance, manage students, and track performance across all fields
