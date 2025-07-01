@@ -178,4 +178,54 @@ export class APIService {
     });
     return this.handleResponse(response);
   }
+
+  // Admin Management APIs
+  static async getAdminUsers() {
+    const response = await this.fetchWithTimeout(`${API_BASE_URL}/get_admin_users.php`);
+    return this.handleResponse(response);
+  }
+
+  static async addAdminUser(adminData: any) {
+    const response = await this.fetchWithTimeout(`${API_BASE_URL}/add_admin_user.php`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(adminData),
+    });
+    return this.handleResponse(response);
+  }
+
+  static async updateAdminUser(adminData: any) {
+    const response = await this.fetchWithTimeout(`${API_BASE_URL}/update_admin_user.php`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(adminData),
+    });
+    return this.handleResponse(response);
+  }
+
+  static async deleteAdminUser(adminId: string) {
+    const response = await this.fetchWithTimeout(`${API_BASE_URL}/delete_admin_user.php`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ id: adminId }),
+    });
+    return this.handleResponse(response);
+  }
+
+  static async authenticateAdmin(credentials: { email: string; password: string }) {
+    const response = await this.fetchWithTimeout(`${API_BASE_URL}/authenticate_admin.php`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(credentials),
+    });
+    return this.handleResponse(response);
+  }
 }
