@@ -58,18 +58,39 @@ export class APIService {
     }
   }
 
-  // Test connection method
+  // Test connection method - MUST be first to ensure it's properly defined
   static async testConnection(): Promise<{ success: boolean; message: string }> {
     try {
       console.log('Testing API connection to:', API_BASE_URL);
-      const response = await this.fetchWithTimeout(`${API_BASE_URL}/get_dashboard_stats.php`, {}, 5000);
-      await this.handleResponse(response);
-      return { success: true, message: 'API connection successful' };
+      
+      // Try a simple endpoint first
+      const response = await this.fetchWithTimeout(`${API_BASE_URL}/get_fields.php`, {}, 5000);
+      const data = await this.handleResponse(response);
+      
+      console.log('Connection test successful:', data);
+      return { 
+        success: true, 
+        message: `API connection successful! Found ${Array.isArray(data) ? data.length : 0} fields.` 
+      };
     } catch (error) {
       console.error('API connection test failed:', error);
+      
+      let message = 'Unknown connection error';
+      if (error instanceof Error) {
+        if (error.message.includes('timeout')) {
+          message = 'Connection timeout - server may be down or unreachable';
+        } else if (error.message.includes('Failed to fetch')) {
+          message = 'Cannot reach server - check if your PHP server is running';
+        } else if (error.message.includes('CORS')) {
+          message = 'CORS error - check server configuration';
+        } else {
+          message = error.message;
+        }
+      }
+      
       return { 
         success: false, 
-        message: error instanceof Error ? error.message : 'Unknown connection error' 
+        message: `Connection failed: ${message}` 
       };
     }
   }

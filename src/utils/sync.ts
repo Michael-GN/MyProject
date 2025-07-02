@@ -148,12 +148,13 @@ export class SyncService {
     }, 30 * 1000); // 30 seconds
   }
 
+  // Use the testConnection method from APIService
   static async testConnection(): Promise<boolean> {
     try {
       console.log('Testing API connection...');
-      await APIService.getDashboardStats();
-      console.log('API connection test successful');
-      return true;
+      const result = await APIService.testConnection();
+      console.log('API connection test result:', result);
+      return result.success;
     } catch (error) {
       console.error('API connection test failed:', error);
       return false;
