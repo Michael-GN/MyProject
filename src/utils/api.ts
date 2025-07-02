@@ -1,10 +1,10 @@
-const API_BASE_URL = 'http://localhost/rollcall-system/api'; // Update this to match your actual PHP server path
+const API_BASE_URL = 'http://localhost/api'; // Update this to match your actual PHP server path
 
 export class APIService {
   private static async fetchWithTimeout(
     url: string,
     options: RequestInit = {},
-    timeout = 10000 // Increased timeout
+    timeout = 15000 // Increased timeout for better reliability
   ): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -13,11 +13,19 @@ export class APIService {
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...options.headers,
+        },
       });
       clearTimeout(timeoutId);
       return response;
     } catch (error) {
       clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Request timeout - please check your server connection');
+      }
       console.error('API Request failed:', error);
       throw error;
     }
@@ -26,18 +34,43 @@ export class APIService {
   private static async handleResponse(response: Response) {
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('API Error Response:', errorText);
+      console.error('API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        body: errorText
+      });
       throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
     }
     
     const text = await response.text();
-    console.log('API Response:', text); // Debug logging
+    console.log('API Response:', { url: response.url, body: text }); // Debug logging
+    
+    if (!text.trim()) {
+      throw new Error('Empty response from server');
+    }
     
     try {
       return JSON.parse(text);
     } catch (parseError) {
       console.error('Invalid JSON response:', text);
-      throw new Error('Invalid JSON response from server');
+      throw new Error(`Invalid JSON response from server: ${text.substring(0, 100)}...`);
+    }
+  }
+
+  // Test connection method
+  static async testConnection(): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('Testing API connection to:', API_BASE_URL);
+      const response = await this.fetchWithTimeout(`${API_BASE_URL}/get_dashboard_stats.php`, {}, 5000);
+      await this.handleResponse(response);
+      return { success: true, message: 'API connection successful' };
+    } catch (error) {
+      console.error('API connection test failed:', error);
+      return { 
+        success: false, 
+        message: error instanceof Error ? error.message : 'Unknown connection error' 
+      };
     }
   }
 
@@ -58,9 +91,6 @@ export class APIService {
       console.log('Submitting attendance:', attendanceData);
       const response = await this.fetchWithTimeout(`${API_BASE_URL}/submit_attendance.php`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(attendanceData),
       });
       const result = await this.handleResponse(response);
@@ -124,9 +154,6 @@ export class APIService {
   static async addStudent(studentData: any) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/add_student.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(studentData),
     });
     return this.handleResponse(response);
@@ -135,9 +162,6 @@ export class APIService {
   static async updateStudent(studentData: any) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/update_student.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(studentData),
     });
     return this.handleResponse(response);
@@ -146,9 +170,6 @@ export class APIService {
   static async deleteStudent(studentId: string) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/delete_student.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ id: studentId }),
     });
     return this.handleResponse(response);
@@ -157,9 +178,6 @@ export class APIService {
   static async addField(fieldData: any) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/add_field.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(fieldData),
     });
     return this.handleResponse(response);
@@ -168,9 +186,6 @@ export class APIService {
   static async updateField(fieldData: any) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/update_field.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(fieldData),
     });
     return this.handleResponse(response);
@@ -179,9 +194,6 @@ export class APIService {
   static async deleteField(fieldId: string) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/delete_field.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ id: fieldId }),
     });
     return this.handleResponse(response);
@@ -190,9 +202,6 @@ export class APIService {
   static async addTimetableEntry(entryData: any) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/add_timetable_entry.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(entryData),
     });
     return this.handleResponse(response);
@@ -201,9 +210,6 @@ export class APIService {
   static async updateTimetableEntry(entryData: any) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/update_timetable_entry.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(entryData),
     });
     return this.handleResponse(response);
@@ -212,9 +218,6 @@ export class APIService {
   static async deleteTimetableEntry(entryId: string) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/delete_timetable_entry.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ id: entryId }),
     });
     return this.handleResponse(response);
@@ -229,9 +232,6 @@ export class APIService {
   static async addAdminUser(adminData: any) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/add_admin_user.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(adminData),
     });
     return this.handleResponse(response);
@@ -240,9 +240,6 @@ export class APIService {
   static async updateAdminUser(adminData: any) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/update_admin_user.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(adminData),
     });
     return this.handleResponse(response);
@@ -251,9 +248,6 @@ export class APIService {
   static async deleteAdminUser(adminId: string) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/delete_admin_user.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({ id: adminId }),
     });
     return this.handleResponse(response);
@@ -262,9 +256,6 @@ export class APIService {
   static async authenticateAdmin(credentials: { email: string; password: string }) {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/authenticate_admin.php`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(credentials),
     });
     return this.handleResponse(response);
