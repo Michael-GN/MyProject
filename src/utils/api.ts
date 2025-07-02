@@ -1,10 +1,10 @@
-const API_BASE_URL = 'http://localhost/api' ;
+const API_BASE_URL = 'http://localhost/rollcall-system/api'; // Update this to match your actual PHP server path
 
 export class APIService {
   private static async fetchWithTimeout(
     url: string,
     options: RequestInit = {},
-    timeout = 5000
+    timeout = 10000 // Increased timeout
   ): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -18,16 +18,21 @@ export class APIService {
       return response;
     } catch (error) {
       clearTimeout(timeoutId);
+      console.error('API Request failed:', error);
       throw error;
     }
   }
 
   private static async handleResponse(response: Response) {
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      console.error('API Error Response:', errorText);
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
     }
     
     const text = await response.text();
+    console.log('API Response:', text); // Debug logging
+    
     try {
       return JSON.parse(text);
     } catch (parseError) {
@@ -37,37 +42,68 @@ export class APIService {
   }
 
   static async getCurrentSessions() {
-    const response = await this.fetchWithTimeout(`${API_BASE_URL}/get_current_sessions.php`);
-    return this.handleResponse(response);
-  }
-
-  static async getTimetable() {
-    const response = await this.fetchWithTimeout(`${API_BASE_URL}/get_timetable.php`);
-    return this.handleResponse(response);
+    try {
+      const response = await this.fetchWithTimeout(`${API_BASE_URL}/get_current_sessions.php`);
+      const data = await this.handleResponse(response);
+      console.log('Current sessions data:', data);
+      return data;
+    } catch (error) {
+      console.error('Failed to get current sessions:', error);
+      throw error;
+    }
   }
 
   static async submitAttendance(attendanceData: any) {
-    const response = await this.fetchWithTimeout(`${API_BASE_URL}/submit_attendance.php`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(attendanceData),
-    });
-    return this.handleResponse(response);
+    try {
+      console.log('Submitting attendance:', attendanceData);
+      const response = await this.fetchWithTimeout(`${API_BASE_URL}/submit_attendance.php`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(attendanceData),
+      });
+      const result = await this.handleResponse(response);
+      console.log('Attendance submission result:', result);
+      return result;
+    } catch (error) {
+      console.error('Failed to submit attendance:', error);
+      throw error;
+    }
   }
 
   static async getAbsenteeReport(filters: any) {
-    const params = new URLSearchParams(filters);
-    const response = await this.fetchWithTimeout(
-      `${API_BASE_URL}/get_absentee_report.php?${params}`
-    );
-    return this.handleResponse(response);
+    try {
+      const params = new URLSearchParams();
+      Object.keys(filters).forEach(key => {
+        if (filters[key]) {
+          params.append(key, filters[key]);
+        }
+      });
+      
+      const url = `${API_BASE_URL}/get_absentee_report.php${params.toString() ? '?' + params.toString() : ''}`;
+      console.log('Fetching absentee report from:', url);
+      
+      const response = await this.fetchWithTimeout(url);
+      const data = await this.handleResponse(response);
+      console.log('Absentee report data:', data);
+      return data;
+    } catch (error) {
+      console.error('Failed to get absentee report:', error);
+      throw error;
+    }
   }
 
   static async getDashboardStats() {
-    const response = await this.fetchWithTimeout(`${API_BASE_URL}/get_dashboard_stats.php`);
-    return this.handleResponse(response);
+    try {
+      const response = await this.fetchWithTimeout(`${API_BASE_URL}/get_dashboard_stats.php`);
+      const data = await this.handleResponse(response);
+      console.log('Dashboard stats data:', data);
+      return data;
+    } catch (error) {
+      console.error('Failed to get dashboard stats:', error);
+      throw error;
+    }
   }
 
   static async getStudents() {
@@ -77,6 +113,11 @@ export class APIService {
 
   static async getFields() {
     const response = await this.fetchWithTimeout(`${API_BASE_URL}/get_fields.php`);
+    return this.handleResponse(response);
+  }
+
+  static async getTimetable() {
+    const response = await this.fetchWithTimeout(`${API_BASE_URL}/get_timetable.php`);
     return this.handleResponse(response);
   }
 
